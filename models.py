@@ -30,3 +30,18 @@ class House(Base):
   area = Column(Float)
   rooms_count = Column(Integer)
   description = Column(Text)
+
+  comments = relationship('Comment', backref='houses')
+
+
+class Comment(Base):
+  __tablename__ = 'comments'
+
+  id = Column(Integer, autoincrement=True, primary_key=True)
+  house_id =  Column(Integer(), ForeignKey('houses.id'))
+  
+  content = Column(Text)
+  created_at = Column(Text)
+  author_id = Column(Integer())
+
+

@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, Response, Form, Cookie
+from fastapi import Depends, FastAPI, Response, Form, Cookie, status, HTTPException
 import models
 from sqlalchemy.orm import Session 
 from sqlalchemy.orm import sessionmaker
@@ -7,18 +7,13 @@ from pydantic import EmailStr, Field, BaseModel
 from typing import Annotated
 from http import HTTPStatus
 import jwt
-
-
-
+import datetime
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 models.Base.metadata.create_all(bind=engine)
 Session = sessionmaker(bind=engine)
 session = Session()
-
-
-
-
 
 
 def get_db():
@@ -44,6 +39,13 @@ class HouseBase(BaseModel):
   area: float | int
   rooms_count: int
   description: str
+
+class CommentBase(BaseModel):
+  content: str
+
+
+
+
 
 
 def create_jwt(user_id: int):
@@ -145,3 +147,55 @@ async def update_house_by_id(id: int, type: str, price: int, address: str, area:
   db.commit()
   return HTTPStatus.OK.value
 
+@app.delete('/shanyraks/{id}')
+async def delete_house_by_id(id: int, token: str = Cookie()):
+  db = SessionLocal()
+  owner_id = decode_jwt(token)
+  db_house = db.query(models.House).filter(models.House.id == id, models.User.id == owner_id).first()
+  db.delete(db_house)
+  db.commit()
+  return {"message": "Item deleted successfully"}
+
+@app.post("/shanyraks/{id}/comments")
+async def comment_post(id: int, comment: CommentBase, token: str = Cookie()):
+  db = SessionLocal()
+  user_id = decode_jwt(token)
+  db_house = db.query(models.House).filter(models.House.id == id).first()
+  now = str(datetime.datetime.now())
+
+  if db_house:
+    user_comment = models.Comment(content=comment.content, created_at=now, author_id = user_id, house_id=id)
+    db.add(user_comment)
+    db.commit()
+    return JSONResponse(content={"message": "Operation successful"}, status_code=status.HTTP_200_OK)
+  else:
+    return {"message": "house not found"}
+  
+
+@app.get("/shanyraks/{id}/comments")
+async def get_comment(id: int):
+  db = SessionLocal()
+  comments = db.query(models.House).filter(models.House.id == id).all() 
+  return {"comments": [comments]} 
+
+@app.put("/shanyraks/{id}/comments")
+async def update_comments(id: int, comment_id: int, content: str, token: str = Cookie()):
+  db = SessionLocal()
+  owner_id = decode_jwt(token)
+  comment = db.query(models.Comment).filter(models.Comment.id == comment_id, models.Comment.house_id == id, models.Comment.author_id == owner_id).first()
+  comment.content = content
+  db.commit()
+  return JSONResponse(content={"message": "Operation successful"}, status_code=status.HTTP_200_OK)
+
+@app.delete("/shanyraks/{id}/comments")
+async def delete_comment(id: int, comment_id: int, token: str = Cookie()):
+  db = SessionLocal()
+  owner_id = decode_jwt(token)
+  comment = db.query(models.Comment).filter(models.Comment.id == comment_id, models.Comment.house_id == id, models.Comment.author_id == owner_id).first()
+  if comment:
+    db.delete(comment)
+    db.commit()
+    return JSONResponse(content={"message": "Operation successful"}, status_code=status.HTTP_200_OK)
+  else:
+
+    raise HTTPException(status_code=404, detail="Item not found")
